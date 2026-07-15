@@ -1,0 +1,39 @@
+{:itonami.blueprint/id "cloud-itonami-isic-2826"
+ :itonami.blueprint/name "Manufacture of machinery for textile, apparel and leather production"
+ :itonami.blueprint/isic-rev5 "2826"
+ :itonami.blueprint/domain :textile-apparel-leather-machinery/manufacturing
+ :itonami.blueprint/license "AGPL-3.0-or-later"
+ :itonami.blueprint/social-impact [:worker-safety :mechanical-safety :electrical-safety]
+ :itonami.blueprint/governor :textile-apparel-leather-machinery-plant-operations-governor
+ :itonami.blueprint/robotics true
+ :itonami.blueprint/required-technologies [:robotics :identity :forms :dmn :bpmn :audit-ledger :eda :cae]
+ :itonami.blueprint/status :public-oss
+ :itonami.blueprint/maturity :implemented
+ :itonami.blueprint/implemented-slice
+ "TexMachAdvisor ⊣ Textile, Apparel and Leather Machinery Plant
+ Operations Governor, langgraph-clj StateGraph, append-only audit
+ ledger. A plant OPERATIONS COORDINATION actor for textile/apparel/
+ leather production-machinery manufacturing (weaving-loom/sewing-
+ machine/leather-cutting-machine assembly and test lines producing
+ finished weaving looms, industrial sewing machines, leather-cutting
+ machines, knitting machines and fabric-cutting machines) -- not
+ direct assembly/test-bench-equipment control authority and not
+ machinery-safety-certification authority (e.g. CE marking under the
+ EU Machinery Directive). Four ops (`:log-production-batch` /
+ `:schedule-maintenance` / `:flag-safety-concern` /
+ `:coordinate-shipment`), all `:effect :propose` only. Twelve concrete
+ governor checks elaborate this blueprint's four HARD invariants:
+ propose-only effect, closed op allowlist, closed proposal-effect
+ allowlist (no direct assembly/test-bench-equipment control),
+ permanent equipment-actuate block, permanent safety-certification-
+ authority block (this actor never self-issues a machinery safety
+ certification mark), independent equipment verification/registration
+ before maintenance scheduling, independent batch verification/
+ registration before shipment coordination, independent shipment-
+ quantity recompute against the batch's own logged production
+ quantity, double-schedule guard, product-type validation, no-load-
+ run-speed plausibility validation, and defect-rate plausibility
+ validation. Safety-concern flagging (mechanical-safety/electrical-
+ safety/CE-compliance concern) ALWAYS escalates to a human plant
+ supervisor; `:log-production-batch` is the only op eligible to
+ auto-commit, and only at phase 3 when governor-clean."}
