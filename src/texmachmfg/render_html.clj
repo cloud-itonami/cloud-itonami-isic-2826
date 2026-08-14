@@ -1,0 +1,1056 @@
+(ns texmachmfg.render-html
+  "Build-time HTML renderer for `docs/samples/operator-console.html`.
+
+  Closes flagship checklist item 2 for `cloud-itonami-isic-2826`: this
+  repo previously had NO demo page and no generator at all.
+
+  This namespace drives the REAL actor stack -- `texmachmfg.operation`
+  (a compiled `langgraph.graph` StateGraph) -> `texmachmfg.governor` ->
+  `texmachmfg.store` -- through a scenario built on top of this repo's
+  own `texmachmfg.sim` demo driver (`clojure -M:dev:run`, run and read
+  BEFORE this file was written, so every seeded id below is one that
+  `texmachmfg.store/sample-data!` actually seeds: batches
+  `batch-001`..`batch-003`, equipment `loom-001` / `sew-002`).
+
+  NOTHING on the emitted page is hand-typed domain data. Every batch
+  quantity, every shipped-unit total, every headroom figure, every rule
+  name, every violation detail string, every draft record number and
+  every audit fact is read back out of the store and the graph's own
+  `:audit` channel after the run. The only hand-written text is section
+  headings and prose that describes the actor's contract; even the phase
+  ladder and the closed allowlists are projected from
+  `texmachmfg.phase`/`texmachmfg.governor`/`texmachmfg.registry` vars
+  rather than restated.
+
+  Determinism: no timestamp, clock, random source or hash of a mutable
+  address ever reaches the page. `sample-data!` is a fixed seed, the mock
+  advisor is deterministic, every store listing is explicitly sorted, and
+  the DADS token block is emitted in sorted order. Two consecutive runs
+  are byte-identical -- verified by rendering twice into `mktemp -d`
+  scratch files and diffing.
+
+  Build-time invariants (`check-run!` below): the render REFUSES to write
+  a page when the scenario did not actually exercise the governor. A
+  console that silently renders zero holds looks exactly like a console
+  whose actor never ran, so this is enforced structurally rather than by
+  convention (precedent: `cloud-itonami-isic-2513`).
+
+  Usage: `clojure -M:dev:render-html [out-file]`
+  (default `docs/samples/operator-console.html`)."
+  (:require [clojure.string :as str]
+            [langgraph.graph :as g]
+            [texmachmfg.governor :as governor]
+            [texmachmfg.operation :as op]
+            [texmachmfg.phase :as phase]
+            [texmachmfg.registry :as registry]
+            [texmachmfg.store :as store]))
+
+;; ============================== scenario ==============================
+
+(def ^:private coordinator
+  "The plant coordinator context used for the whole scenario -- phase 3
+  (`supervised-auto`), the repo's own `texmachmfg.phase/default-phase`."
+  {:actor-id "coord-1" :actor-role :plant-coordinator :phase 3})
+
+(def ^:private read-only-coordinator
+  "The SAME coordinator at phase 0 (`read-only`). Used once, to show that
+  the rollout phase gate holds a proposal the governor itself cleared."
+  (assoc coordinator :phase 0))
+
+(defn- record-audit!
+  "Keep one audit vector per thread, in first-run order. A resumed run's
+  state carries the whole accumulated `:audit` channel (the channel's
+  reducer is `into`), so the entry is REPLACED rather than appended --
+  otherwise every approved op's proposal fact would be counted twice."
+  [a tid facts]
+  (swap! a (fn [v]
+             (if-let [i (first (keep-indexed (fn [i [t _]] (when (= t tid) i)) v))]
+               (assoc v i [tid facts])
+               (conj v [tid facts])))))
+
+(defn- exec!
+  "One coordination request = one graph run on its own thread-id."
+  [actor a tid request context]
+  (let [r (g/run* actor {:request request :context context} {:thread-id tid})]
+    (record-audit! a tid (get-in r [:state :audit]))
+    r))
+
+(defn- resume!
+  "Resume a run paused by `interrupt-before #{:request-approval}` with a
+  real human decision."
+  [actor a tid approval]
+  (let [r (g/run* actor {:approval approval} {:thread-id tid :resume? true})]
+    (record-audit! a tid (get-in r [:state :audit]))
+    r))
+
+(defn run-demo!
+  "Runs a freshly seeded store through a scenario that reaches EVERY
+  disposition this actor can produce and fires EVERY HARD rule
+  `texmachmfg.governor` implements.
+
+  Clean lane (t01-t05):
+    t01  `:log-production-batch` batch-001 -- governor-clean, and the one
+         op in phase 3's `:auto` set, so it auto-commits with no human.
+    t02  `:schedule-maintenance` mnt-1 against loom-001 (verified +
+         registered) -- escalates (`:schedule-maintenance` is deliberately
+         absent from every phase's `:auto` set), approved by coord-1.
+    t03  `:flag-safety-concern` concern-1 -- ALWAYS escalates on
+         `:stake :coordination/safety-concern` regardless of confidence;
+         approved by safety-supervisor-1.
+    t04  `:coordinate-shipment` ship-1, 50 units off batch-001
+         (200 shipped of 1000) -- escalates, approved by ship-approver-1.
+    t05  `:coordinate-shipment` ship-2, 20 units off batch-002 -- an EXACT
+         fill (280 shipped + 20 = its recorded 300). Legal, and the
+         regression this repo fixed in `7319be4` (comparing the raw
+         double sum read an exact fill as over capacity). Approved.
+
+  Hold lane (t06-t19), one request per reason, exercised directly rather
+  than only via a happy path:
+    t06 :not-propose-effect          t13 :already-scheduled (mnt-1 twice)
+    t07 :unknown-op +                t14 :invalid-product-type
+        :equipment-control-blocked   t15 :invalid-no-load-run-speed
+    t08 :equipment-not-verified      t16 :invalid-defect-rate
+    t09 :batch-not-verified          t17 :certification-authority-blocked
+    t10 :shipment-quantity-exceeded  t18 :approver-rejected (human says no)
+        (over -- batch-002 is now    t19 phase gate `:phase-disabled`
+        exactly full after t05)           (governor CLEAN, phase 0 holds)
+    t11 :shipment-quantity-exceeded
+        (UN-CHECKABLE -- no :units;
+        the second branch, which
+        used to fall through as
+        `not over` and ship)
+    t12 :equipment-actuate-blocked
+
+  Returns `{:db store :audit [fact ...]}`. Every value the renderer reads
+  comes from one of those two."
+  []
+  (let [db (-> (store/mem-store) (store/sample-data!))
+        actor (op/build db)
+        a (atom [])]
+
+    ;; ---------- clean lane ----------
+    (exec! actor a "t01"
+           {:op :log-production-batch :effect :propose :subject "batch-001"
+            :patch {:product-type :weaving-loom :last-assessed "2026-07-14"}}
+           coordinator)
+
+    (exec! actor a "t02"
+           {:op :schedule-maintenance :effect :propose :subject "mnt-1"
+            :value {:equipment-id "loom-001" :maintenance-type :heddle-inspection
+                    :scheduled-date "2026-08-01" :actuate-equipment? false}}
+           coordinator)
+    (resume! actor a "t02" {:status :approved :by "coord-1"})
+
+    (exec! actor a "t03"
+           {:op :flag-safety-concern :effect :propose :subject "concern-1"
+            :value {:equipment-id "loom-001" :severity :moderate
+                    :description "シャトル部の異常振動、安全ガードの緩み"}}
+           coordinator)
+    (resume! actor a "t03" {:status :approved :by "safety-supervisor-1"})
+
+    (exec! actor a "t04"
+           {:op :coordinate-shipment :effect :propose :subject "ship-1"
+            :value {:batch-id "batch-001" :units 50.0 :destination "buyer-yard-north"}}
+           coordinator)
+    (resume! actor a "t04" {:status :approved :by "ship-approver-1"})
+
+    (exec! actor a "t05"
+           {:op :coordinate-shipment :effect :propose :subject "ship-2"
+            :value {:batch-id "batch-002" :units 20.0 :destination "buyer-yard-west"}}
+           coordinator)
+    (resume! actor a "t05" {:status :approved :by "ship-approver-1"})
+
+    ;; ---------- hold lane ----------
+    (exec! actor a "t06"
+           {:op :log-production-batch :effect :direct-write :subject "batch-001"
+            :patch {:product-type :weaving-loom}}
+           coordinator)
+
+    (exec! actor a "t07"
+           {:op :actuate-assembly-line :effect :propose :subject "batch-001"}
+           coordinator)
+
+    (exec! actor a "t08"
+           {:op :schedule-maintenance :effect :propose :subject "mnt-2"
+            :value {:equipment-id "sew-002" :maintenance-type :calibration
+                    :scheduled-date "2026-08-01" :actuate-equipment? false}}
+           coordinator)
+
+    (exec! actor a "t09"
+           {:op :coordinate-shipment :effect :propose :subject "ship-3"
+            :value {:batch-id "batch-003" :units 100.0 :destination "buyer-yard-south"}}
+           coordinator)
+
+    (exec! actor a "t10"
+           {:op :coordinate-shipment :effect :propose :subject "ship-4"
+            :value {:batch-id "batch-002" :units 100.0 :destination "buyer-yard-east"}}
+           coordinator)
+
+    (exec! actor a "t11"
+           {:op :coordinate-shipment :effect :propose :subject "ship-5"
+            :value {:batch-id "batch-001" :destination "buyer-yard-north"}}
+           coordinator)
+
+    (exec! actor a "t12"
+           {:op :schedule-maintenance :effect :propose :subject "mnt-3"
+            :value {:equipment-id "loom-001" :maintenance-type :force-run
+                    :scheduled-date "2026-09-01" :actuate-equipment? true}}
+           coordinator)
+
+    (exec! actor a "t13"
+           {:op :schedule-maintenance :effect :propose :subject "mnt-1"
+            :value {:equipment-id "loom-001" :maintenance-type :heddle-inspection
+                    :scheduled-date "2026-08-01" :actuate-equipment? false}}
+           coordinator)
+
+    (exec! actor a "t14"
+           {:op :log-production-batch :effect :propose :subject "batch-001"
+            :patch {:product-type :unobtainium}}
+           coordinator)
+
+    (exec! actor a "t15"
+           {:op :log-production-batch :effect :propose :subject "batch-001"
+            :patch {:no-load-run-speed-rpm 999999.0}}
+           coordinator)
+
+    (exec! actor a "t16"
+           {:op :log-production-batch :effect :propose :subject "batch-001"
+            :patch {:defect-rate-percent 999.0}}
+           coordinator)
+
+    (exec! actor a "t17"
+           {:op :log-production-batch :effect :propose :subject "batch-001"
+            :patch {:issue-certification? true}}
+           coordinator)
+
+    (exec! actor a "t18"
+           {:op :schedule-maintenance :effect :propose :subject "mnt-4"
+            :value {:equipment-id "loom-001" :maintenance-type :belt-check
+                    :scheduled-date "2026-09-15" :actuate-equipment? false}}
+           coordinator)
+    (resume! actor a "t18" {:status :rejected :by "coord-1"})
+
+    (exec! actor a "t19"
+           {:op :log-production-batch :effect :propose :subject "batch-001"
+            :patch {:product-type :weaving-loom :last-assessed "2026-07-20"}}
+           read-only-coordinator)
+
+    {:db db :audit (vec (mapcat second @a))}))
+
+;; ============================== derived views ==============================
+;;
+;; Everything below reads the run back. No scenario knowledge is
+;; duplicated here -- if a request is added to or removed from
+;; `run-demo!`, these projections follow automatically.
+
+(defn- holds
+  "Every hold fact the run actually wrote to the append-only ledger --
+  both governor HARD holds and the phase gate's own holds."
+  [ledger]
+  (filterv #(#{:governor-hold :approval-rejected} (:t %)) ledger))
+
+(defn- commits [ledger] (filterv #(= :committed (:t %)) ledger))
+
+(defn- violation-rules
+  "The distinct governor rule keywords a hold fact carries, in order."
+  [fact]
+  (mapv :rule (:violations fact)))
+
+(defn- rule-groups
+  "rule keyword -> {:rule :count :subjects :details}, derived from the
+  ledger. Sorted by rule name so the table is deterministic."
+  [ledger]
+  (->> (holds ledger)
+       (mapcat (fn [f] (map (fn [v] [(:rule v) (:detail v) (:subject f) (:op f)])
+                            (:violations f))))
+       (group-by first)
+       (map (fn [[rule rows]]
+              {:rule rule
+               :count (count rows)
+               :ops (vec (sort (distinct (map #(nth % 3) rows))))
+               :subjects (vec (sort (distinct (map #(nth % 2) rows))))
+               :details (vec (distinct (keep #(nth % 1) rows)))}))
+       (sort-by (comp name :rule))
+       vec))
+
+(defn- phase-gate-groups
+  "Holds that carry NO governor violation but were stopped by the rollout
+  phase gate. Kept separate from `rule-groups` on purpose: a reader must
+  be able to tell `the governor objected` from `the governor was happy
+  and the phase gate said not yet`."
+  [ledger]
+  (->> (holds ledger)
+       (filter #(and (empty? (:violations %)) (:phase-reason %)))
+       (group-by :phase-reason)
+       (map (fn [[reason rows]]
+              {:reason reason
+               :count (count rows)
+               :phases (vec (sort (distinct (keep :phase rows))))
+               :subjects (vec (sort (distinct (map :subject rows))))
+               :ops (vec (sort (distinct (map :op rows))))}))
+       (sort-by (comp name :reason))
+       vec))
+
+(defn- audit-of [audit t] (filterv #(= t (:t %)) audit))
+
+(defn- proposals [audit] (audit-of audit :texmachmfg-advisor-proposal))
+
+(defn- committed-entity
+  "The stored entity a committed op produced, looked up the way this
+  repo's own store exposes it."
+  [db {:keys [op subject]}]
+  (case op
+    :schedule-maintenance (store/maintenance db subject)
+    :coordinate-shipment  (store/shipment db subject)
+    :flag-safety-concern  (first (filter #(= subject (:id %)) (store/safety-concerns db)))
+    :log-production-batch (store/batch db subject)
+    nil))
+
+(defn- approval-attribution
+  "MEASURED, not assumed: for every approval this run actually granted,
+  does the approver's identity survive into the committed store record?
+
+  `texmachmfg.operation/commit-record` builds BOTH a `:value` and a
+  `:payload`, and only the `:payload` gets `:approved-by` on the approval
+  path -- but `texmachmfg.store/commit-record!` destructures `:value`.
+  Rather than hard-code that finding, this walks the register the commit
+  actually wrote and asks whether `:approved-by` is present, so the page
+  self-corrects the day the store is fixed.
+
+  The approver is joined back from the graph's `:approval-granted` audit
+  fact, which does carry `:by`. Note that fact is itself never appended
+  to the store's ledger (only `commit-fact` is), so this join is the
+  ONLY place the approver's name survives at all -- which is exactly why
+  the page labels it instead of quietly omitting it."
+  [db audit]
+  (->> (audit-of audit :approval-granted)
+       (mapv (fn [{:keys [op subject by]}]
+               (let [ent (committed-entity db {:op op :subject subject})]
+                 {:op op
+                  :subject subject
+                  :approver by
+                  :entity-found? (some? ent)
+                  :in-record? (contains? ent :approved-by)
+                  :record-value (get ent :approved-by)})))))
+
+(defn- traceability
+  "Every (seed entity, request) pair the run actually produced, joined two
+  independent ways so a reader can check the page against the seed:
+
+    - direct   -- a ledger fact whose `:subject` IS the entity id
+    - cited    -- an advisor proposal whose `:cites` names the entity id
+                  (the advisor cites the equipment/batch it read), joined
+                  to that request's own final ledger disposition
+
+  Sorted by entity then by ledger position, so it is deterministic."
+  [db ledger audit]
+  (let [ids (concat (map :id (store/all-batches db)) (map :id (store/all-equipment db)))
+        indexed (map-indexed (fn [i f] (assoc f ::i i)) ledger)
+        cited-by (fn [id] (->> (proposals audit)
+                               (filter #(some #{id} (:cites %)))
+                               (map :subject)
+                               distinct
+                               set))]
+    (->> (for [id (sort ids)
+               :let [cited (cited-by id)]
+               f indexed
+               :when (or (= id (:subject f)) (contains? cited (:subject f)))]
+           {:entity id
+            :via (if (= id (:subject f)) "direct subject" "advisor :cites")
+            :subject (:subject f)
+            :op (:op f)
+            :outcome (:t f)
+            :basis (:basis f)
+            :phase-reason (:phase-reason f)
+            ::i (::i f)})
+         (sort-by (juxt :entity ::i))
+         vec)))
+
+(defn- headroom
+  "Remaining shipping headroom against the batch's OWN recorded quantity,
+  computed with this repo's own checkability predicate first -- an
+  un-computable headroom is reported as un-computable, never as room."
+  [b]
+  (if (registry/shipment-quantity-exceeded-checkable? b 0.0)
+    {:checkable? true
+     :value (- (double (:quantity-units b)) (double (:shipped-units b 0.0)))}
+    {:checkable? false}))
+
+;; ============================== DADS token extraction ==============================
+
+(def ^:private vendored-css-path
+  "This repo's own product face already vendors the デジタル庁デザイン
+  システム (jp-go-digital-design-system) CSS inline. The console reads its
+  primitives out of THAT copy rather than adding a git dependency: the
+  build stays offline, and the console cannot drift away from the page it
+  sits next to. Re-vendoring `docs/index.html` re-skins this console."
+  "docs/index.html")
+
+(def ^:private console-tokens
+  "The DADS primitives this console's own stylesheet references. Every
+  name here must resolve out of the vendored copy or the build fails --
+  and `check-css-closure!` additionally proves no OTHER `var(--x)` leaked
+  into the stylesheet."
+  ["--font-family-sans" "--font-family-mono"
+   "--color-neutral-white"
+   "--color-neutral-solid-gray-50" "--color-neutral-solid-gray-100"
+   "--color-neutral-solid-gray-200" "--color-neutral-solid-gray-300"
+   "--color-neutral-solid-gray-600" "--color-neutral-solid-gray-700"
+   "--color-neutral-solid-gray-800" "--color-neutral-solid-gray-900"
+   "--color-primitive-blue-50" "--color-primitive-blue-900"
+   "--color-primitive-green-50" "--color-primitive-green-1000"
+   "--color-primitive-red-50" "--color-primitive-red-1000"
+   "--color-primitive-yellow-50" "--color-primitive-yellow-1100"])
+
+(defn- root-declarations
+  "Parse the `:root { ... }` custom-property block out of the vendored
+  DADS stylesheet. Returns name -> value with whitespace runs collapsed
+  (some DADS values, e.g. `--font-family-sans`, wrap across lines)."
+  [css]
+  (let [start (str/index-of css ":root {")]
+    (when-not start
+      (throw (ex-info "render-html: no :root { block in the vendored DADS CSS"
+                      {:path vendored-css-path})))
+    (let [end (str/index-of css "\n}" start)
+          _ (when-not end
+              (throw (ex-info "render-html: unterminated :root block in the vendored DADS CSS"
+                              {:path vendored-css-path})))
+          body (subs css (+ start (count ":root {")) end)]
+      (into {}
+            (keep (fn [decl]
+                    (let [d (str/trim decl)
+                          i (str/index-of d ":")]
+                      (when (and i (str/starts-with? d "--"))
+                        [(subs d 0 i)
+                         (str/replace (str/trim (subs d (inc i))) #"\s+" " ")])))
+                  (str/split body #";"))))))
+
+(defn- close-over-vars
+  "Transitively pull in every token a requested token's value references
+  via `var(--x)` -- `--color-semantic-*` are aliases onto primitives, and
+  emitting one without its target would ship a dangling reference."
+  [decls names]
+  (loop [want (vec names) seen #{} out {}]
+    (if-let [n (first want)]
+      (cond
+        (seen n) (recur (rest want) seen out)
+        :else
+        (let [v (get decls n)]
+          (when-not v
+            (throw (ex-info (str "render-html: DADS token " n
+                                 " is not defined in the vendored stylesheet")
+                            {:token n :path vendored-css-path})))
+          (recur (into (vec (rest want)) (map second (re-seq #"var\((--[a-z0-9-]+)" v)))
+                 (conj seen n)
+                 (assoc out n v))))
+      out)))
+
+(defn- token-block
+  "The `:root` block emitted into the console, sorted by token name so
+  the output is byte-stable."
+  [decls]
+  (str ":root {\n"
+       (str/join "\n" (map (fn [[k v]] (str "  " k ": " v ";")) (sort decls)))
+       "\n}\n"))
+
+(def ^:private console-css
+  "The console's own stylesheet. It references ONLY the DADS primitives
+  declared in `console-tokens` -- no hard-coded hex anywhere, so the
+  console inherits the product face's palette exactly.
+
+  Note the tint backgrounds use the primitive `-50` steps. DADS'
+  `--color-semantic-error-1` and `-2` are red-800 and red-900: BOTH dark,
+  not a strong/weak pair, so neither can serve as a tint."
+  (str "*, *::before, *::after { box-sizing: border-box; }\n"
+       "body { margin: 0; background: var(--color-neutral-solid-gray-50);"
+       " color: var(--color-neutral-solid-gray-800);"
+       " font-family: var(--font-family-sans); line-height: 1.7; }\n"
+       "header.bar { background: var(--color-neutral-white);"
+       " border-bottom: 1px solid var(--color-neutral-solid-gray-200);"
+       " padding: 2rem 1.5rem 1.5rem; }\n"
+       "header.bar h1 { margin: 0 0 .75rem; font-size: 1.5rem; line-height: 1.4;"
+       " color: var(--color-neutral-solid-gray-900); }\n"
+       ".badge { display: inline-block; background: var(--color-primitive-blue-50);"
+       " color: var(--color-primitive-blue-900); border-radius: 999px;"
+       " padding: .25rem .875rem; font-size: .8125rem; }\n"
+       "main { max-width: 72rem; margin-inline: auto; padding: 1.5rem 1.5rem 4rem; }\n"
+       "section.card { background: var(--color-neutral-white);"
+       " border: 1px solid var(--color-neutral-solid-gray-200); border-radius: 12px;"
+       " padding: 1.5rem; margin-bottom: 1.5rem; overflow-x: auto; }\n"
+       "section.card h2 { margin: 0 0 .5rem; font-size: 1.125rem;"
+       " color: var(--color-neutral-solid-gray-900); }\n"
+       "p.muted { margin: 0 0 1rem; color: var(--color-neutral-solid-gray-600);"
+       " font-size: .875rem; line-height: 1.8; }\n"
+       "table { border-collapse: collapse; width: 100%; font-size: .875rem; }\n"
+       "th, td { text-align: left; vertical-align: top; padding: .5rem .625rem;"
+       " border-bottom: 1px solid var(--color-neutral-solid-gray-100); }\n"
+       "thead th { border-bottom: 2px solid var(--color-neutral-solid-gray-300);"
+       " color: var(--color-neutral-solid-gray-700); font-size: .8125rem;"
+       " white-space: nowrap; }\n"
+       "tbody tr:last-child td { border-bottom: none; }\n"
+       "td.num { text-align: right; font-variant-numeric: tabular-nums;"
+       " white-space: nowrap; }\n"
+       "code { font-family: var(--font-family-mono);"
+       " background: var(--color-neutral-solid-gray-50);"
+       " border: 1px solid var(--color-neutral-solid-gray-200); border-radius: 4px;"
+       " padding: 1px 5px; font-size: .9em; }\n"
+       ".pill { display: inline-block; border-radius: 999px; padding: .0625rem .5rem;"
+       " font-size: .75rem; white-space: nowrap; }\n"
+       ".ok { background: var(--color-primitive-green-50);"
+       " color: var(--color-primitive-green-1000); }\n"
+       ".critical { background: var(--color-primitive-red-50);"
+       " color: var(--color-primitive-red-1000); }\n"
+       ".warn { background: var(--color-primitive-yellow-50);"
+       " color: var(--color-primitive-yellow-1100); }\n"
+       ".info { background: var(--color-primitive-blue-50);"
+       " color: var(--color-primitive-blue-900); }\n"
+       ".muted-pill { background: var(--color-neutral-solid-gray-50);"
+       " color: var(--color-neutral-solid-gray-700); }\n"
+       ".stats { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0; padding: 0;"
+       " list-style: none; }\n"
+       ".stats li { border: 1px solid var(--color-neutral-solid-gray-200);"
+       " border-radius: 10px; padding: .75rem 1rem; min-width: 9rem; }\n"
+       ".stats b { display: block; font-size: 1.5rem; line-height: 1.2;"
+       " font-variant-numeric: tabular-nums;"
+       " color: var(--color-neutral-solid-gray-900); }\n"
+       ".stats span { font-size: .8125rem;"
+       " color: var(--color-neutral-solid-gray-600); }\n"
+       "footer { max-width: 72rem; margin-inline: auto;"
+       " padding: 0 1.5rem 3rem; font-size: .8125rem;"
+       " color: var(--color-neutral-solid-gray-600); }\n"))
+
+(defn- check-css-closure!
+  "Build-time proof that the page has no dangling CSS variable: every
+  `var(--x)` occurring anywhere in the emitted stylesheet must be defined
+  by the emitted `:root` block. This is the whole reason the token list
+  is declared rather than inferred -- a token added to the CSS but not to
+  `console-tokens` fails the build instead of silently unstyling a cell."
+  [decls css]
+  (let [used (set (map second (re-seq #"var\((--[a-z0-9-]+)" css)))
+        defined (set (keys decls))
+        missing (sort (remove defined used))]
+    (when (seq missing)
+      (throw (ex-info (str "render-html: dangling CSS variables: " (str/join ", " missing))
+                      {:missing (vec missing)})))
+    (when (zero? (count used))
+      (throw (ex-info "render-html: stylesheet references no DADS token at all" {})))
+    used))
+
+;; ============================== html helpers ==============================
+
+(defn- esc [v]
+  (-> (str v)
+      (str/replace "&" "&amp;")
+      (str/replace "<" "&lt;")
+      (str/replace ">" "&gt;")
+      (str/replace "\"" "&quot;")))
+
+(defn- kw [v] (if (keyword? v) (name v) (str v)))
+
+(defn- code [v] (str "<code>" (esc v) "</code>"))
+
+(defn- pill [class label] (str "<span class=\"pill " class "\">" (esc label) "</span>"))
+
+(defn- yes-no [b] (if b (pill "ok" "yes") (pill "critical" "no")))
+
+(defn- join-codes [xs]
+  (if (seq xs)
+    (str/join " " (map (comp code kw) xs))
+    "<span class=\"pill muted-pill\">—</span>"))
+
+(defn- row [& cells] (str "        <tr>" (str/join (map #(str "<td>" % "</td>") cells)) "</tr>"))
+
+(defn- section [title lead headers rows]
+  (str "  <section class=\"card\">\n"
+       "    <h2>" title "</h2>\n"
+       "    <p class=\"muted\">" lead "</p>\n"
+       "    <table>\n"
+       "      <thead><tr>" (str/join (map #(str "<th>" % "</th>") headers)) "</tr></thead>\n"
+       "      <tbody>\n"
+       (str/join "\n" rows) "\n"
+       "      </tbody>\n"
+       "    </table>\n"
+       "  </section>\n"))
+
+(defn- numcell [v] (str "<td class=\"num\">" (esc v) "</td>"))
+
+;; ============================== sections ==============================
+
+(defn- batch-rows [db ledger]
+  (for [b (store/all-batches db)]
+    (let [h (headroom b)]
+      (str "        <tr><td>" (code (:id b)) "</td>"
+           "<td>" (code (kw (:product-type b))) "</td>"
+           "<td>" (esc (:model b)) "</td>"
+           (numcell (:no-load-run-speed-rpm b))
+           (numcell (:quantity-units b))
+           (numcell (:shipped-units b))
+           (numcell (if (:checkable? h) (:value h) "un-computable"))
+           "<td>" (yes-no (registry/batch-verified? b)) "</td>"
+           "<td>" (yes-no (registry/batch-registered? b)) "</td>"
+           "<td>" (if (registry/batch-ready? b)
+                    (pill "ok" "shippable")
+                    (pill "critical" "blocked — batch-not-verified"))
+           "</td>"
+           "<td>" (esc (count (filter #(= (:id b) (:subject %)) ledger))) "</td>"
+           "</tr>"))))
+
+(defn- equipment-rows [db]
+  (for [e (store/all-equipment db)]
+    (str "        <tr><td>" (code (:id e)) "</td>"
+         "<td>" (code (kw (:kind e))) "</td>"
+         "<td>" (yes-no (registry/equipment-verified? e)) "</td>"
+         "<td>" (yes-no (registry/equipment-registered? e)) "</td>"
+         "<td>" (if (:last-maintenance-date e)
+                  (esc (:last-maintenance-date e))
+                  (pill "muted-pill" "none on file")) "</td>"
+         "<td>" (if (:last-scheduled-maintenance-date e)
+                  (esc (:last-scheduled-maintenance-date e))
+                  (pill "muted-pill" "none")) "</td>"
+         "<td>" (if (registry/equipment-ready? e)
+                  (pill "ok" "schedulable")
+                  (pill "critical" "blocked — equipment-not-verified"))
+         "</td></tr>")))
+
+(defn- maintenance-rows [db]
+  (let [drafts (into {} (map (juxt #(get % "maintenance_id") identity)
+                             (store/maintenance-history db)))]
+    (for [m (store/all-maintenance db)]
+      (let [d (get drafts (:id m))]
+        (str "        <tr><td>" (code (:id m)) "</td>"
+             "<td>" (code (:equipment-id m)) "</td>"
+             "<td>" (code (kw (:maintenance-type m))) "</td>"
+             "<td>" (esc (:scheduled-date m)) "</td>"
+             "<td>" (if (:scheduled? m) (pill "ok" "scheduled") (pill "warn" "not scheduled")) "</td>"
+             "<td>" (if (true? (:actuate-equipment? m))
+                      (pill "critical" "actuate requested")
+                      (pill "ok" "draft only — no actuation")) "</td>"
+             "<td>" (code (:maintenance-number m)) "</td>"
+             "<td>" (if d
+                      (str (code (get d "kind")) " "
+                           (if (get d "immutable") (pill "ok" "immutable") (pill "warn" "mutable")))
+                      (pill "critical" "no draft record")) "</td>"
+             "</tr>")))))
+
+(defn- shipment-rows
+  "Shipment ids are taken from the append-only draft history rather than
+  from the store's internals -- `Store` exposes `shipment-history` and
+  `shipment` but no `all-shipments`, and reaching into `MemStore`'s atom
+  would bind this page to one backend."
+  [db]
+  (let [drafts (into {} (map (juxt #(get % "shipment_id") identity)
+                             (store/shipment-history db)))]
+    (for [id (sort (keys drafts))]
+      (let [s (store/shipment db id)
+            d (get drafts id)
+            b (store/batch db (:batch-id s))]
+        (str "        <tr><td>" (code (:id s)) "</td>"
+             "<td>" (code (:batch-id s)) "</td>"
+             (numcell (:units s))
+             "<td>" (esc (:destination s)) "</td>"
+             (numcell (:quantity-units b))
+             (numcell (:shipped-units b))
+             "<td>" (code (:shipment-number s)) "</td>"
+             "<td>" (if d
+                      (str (code (get d "kind")) " "
+                           (if (get d "immutable") (pill "ok" "immutable") (pill "warn" "mutable")))
+                      (pill "critical" "no draft record")) "</td>"
+             "</tr>")))))
+
+(defn- concern-rows [db]
+  (for [c (store/safety-concerns db)]
+    (str "        <tr><td>" (code (:id c)) "</td>"
+         "<td>" (code (:equipment-id c)) "</td>"
+         "<td>" (pill "warn" (kw (:severity c))) "</td>"
+         "<td>" (esc (:description c)) "</td>"
+         "<td>" (pill "info" "always human-approved") "</td></tr>")))
+
+(defn- phase-rows []
+  (for [[n {:keys [label writes auto]}] (sort-by key phase/phases)]
+    (str "        <tr><td>" (esc n) (when (= n phase/default-phase)
+                                      (str " " (pill "info" "default"))) "</td>"
+         "<td>" (code label) "</td>"
+         "<td>" (join-codes (sort-by name writes)) "</td>"
+         "<td>" (join-codes (sort-by name auto)) "</td>"
+         "<td>" (join-codes (sort-by name (remove auto writes))) "</td>"
+         "</tr>")))
+
+(defn- contract-rows []
+  [(row "closed op allowlist" (join-codes (sort-by name governor/allowed-ops))
+        "any other <code>:op</code> → HARD <code>:unknown-op</code>")
+   (row "closed proposal-effect allowlist" (join-codes (sort-by name governor/allowed-proposal-effects))
+        "any other <code>:effect</code> → HARD <code>:equipment-control-blocked</code> (permanent)")
+   (row "always-human stakes" (join-codes (sort-by name governor/high-stakes))
+        "escalates regardless of confidence")
+   (row "confidence floor" (code governor/confidence-floor)
+        "below floor → escalate to a human plant supervisor (SOFT)")
+   (row "known product types" (join-codes (sort-by name registry/valid-product-types))
+        "any other → HARD <code>:invalid-product-type</code>")
+   (row "no-load run-speed bounds"
+        (str (code (str registry/no-load-run-speed-rpm-min " rpm")) " – "
+             (code (str registry/no-load-run-speed-rpm-max " rpm")))
+        "outside → HARD <code>:invalid-no-load-run-speed</code>")
+   (row "defect-rate bounds"
+        (str (code (str registry/defect-rate-min-percent " %")) " – "
+             (code (str registry/defect-rate-max-percent " %")))
+        "outside → HARD <code>:invalid-defect-rate</code>")
+   (row "never auto at any phase"
+        (join-codes (sort-by name (remove (:auto (get phase/phases phase/default-phase))
+                                          phase/write-ops)))
+        "structural, not a rollout milestone still to come")])
+
+(defn- rule-rows [ledger]
+  (for [{:keys [rule ops subjects details] n :count} (rule-groups ledger)]
+    (str "        <tr><td>" (code (kw rule)) "</td>"
+         "<td>" (pill "critical" "HARD") "</td>"
+         (numcell n)
+         "<td>" (join-codes ops) "</td>"
+         "<td>" (join-codes subjects) "</td>"
+         "<td>" (str/join "<br>" (map esc details)) "</td></tr>")))
+
+(defn- phase-hold-rows [ledger]
+  (for [{:keys [reason phases subjects ops] n :count} (phase-gate-groups ledger)]
+    (str "        <tr><td>" (code (kw reason)) "</td>"
+         "<td>" (pill "warn" "phase gate") "</td>"
+         (numcell n)
+         "<td>" (join-codes phases) "</td>"
+         "<td>" (join-codes ops) "</td>"
+         "<td>" (join-codes subjects) "</td>"
+         "<td>governor raised no violation; the rollout phase had not enabled this write yet</td>"
+         "</tr>")))
+
+(defn- attribution-rows [rows]
+  (for [{:keys [op subject approver entity-found? in-record? record-value]} rows]
+    (str "        <tr><td>" (code subject) "</td>"
+         "<td>" (code (kw op)) "</td>"
+         "<td>" (code approver) "</td>"
+         "<td>" (if entity-found? (pill "ok" "written") (pill "critical" "missing")) "</td>"
+         "<td>" (if in-record?
+                  (str (pill "ok" "in commit record") " " (code record-value))
+                  (pill "warn" "audit only — not in commit record")) "</td>"
+         "</tr>")))
+
+(defn- traceability-rows [rows]
+  (for [{:keys [entity via subject op outcome basis phase-reason]} rows]
+    (str "        <tr><td>" (code entity) "</td>"
+         "<td>" (pill (if (= via "direct subject") "info" "muted-pill") via) "</td>"
+         "<td>" (code subject) "</td>"
+         "<td>" (code (kw op)) "</td>"
+         "<td>" (if (= :committed outcome)
+                  (pill "ok" "committed")
+                  (pill "critical" (kw outcome))) "</td>"
+         "<td>" (if (seq basis)
+                  (join-codes basis)
+                  (if phase-reason (code (kw phase-reason)) (join-codes nil))) "</td>"
+         "</tr>")))
+
+(defn- ledger-rows [ledger]
+  (map-indexed
+   (fn [i {:keys [t op actor subject disposition basis confidence phase-reason phase summary]}]
+     (str "        <tr>" (numcell (inc i))
+          "<td>" (code (kw t)) "</td>"
+          "<td>" (code (kw op)) "</td>"
+          "<td>" (code subject) "</td>"
+          "<td>" (code actor) "</td>"
+          "<td>" (if (= :commit disposition)
+                   (pill "ok" "commit")
+                   (pill "critical" (kw disposition))) "</td>"
+          (numcell confidence)
+          "<td>" (if (seq basis)
+                   (join-codes basis)
+                   (if phase-reason
+                     (str (code (kw phase-reason)) " " (pill "warn" (str "phase " phase)))
+                     (join-codes nil))) "</td>"
+          "<td>" (esc (or summary "")) "</td>"
+          "</tr>"))
+   ledger))
+
+(defn- proposal-rows [audit]
+  (for [{:keys [op subject summary rationale cites confidence]} (proposals audit)]
+    (str "        <tr><td>" (code (kw op)) "</td>"
+         "<td>" (code subject) "</td>"
+         (numcell confidence)
+         "<td>" (join-codes cites) "</td>"
+         "<td>" (esc summary) "</td>"
+         "<td>" (esc rationale) "</td></tr>")))
+
+;; ============================== build-time invariants ==============================
+
+(defn check-run!
+  "Refuse to emit a console the run did not actually earn.
+
+  Every clause answers one of the five questions this workspace requires
+  of any check (ADR-2608136000): a check that could not run must NOT
+  return the same value as a check that ran and found nothing. Each
+  clause below therefore fails on an EMPTY input rather than passing it.
+
+  Returns the ledger on success; throws otherwise."
+  [{:keys [db audit]}]
+  (let [ledger (vec (store/ledger db))
+        hs (holds ledger)
+        cs (commits ledger)
+        rules (set (mapcat violation-rules hs))
+        gov-holds (filterv #(seq (:violations %)) hs)]
+    (when (empty? ledger)
+      (throw (ex-info "render-html: the scenario produced an EMPTY ledger -- the actor did not run" {})))
+    (when (empty? audit)
+      (throw (ex-info "render-html: the scenario produced NO audit facts -- the graph did not run" {})))
+    (when (zero? (count (filter #(= :governor-hold (:t %)) ledger)))
+      (throw (ex-info "render-html: the scenario produced ZERO :governor-hold records -- a console that shows no hold is indistinguishable from a console whose governor never ran"
+                      {:ledger-facts (count ledger)})))
+    (when (empty? gov-holds)
+      (throw (ex-info "render-html: no hold carried a governor violation" {})))
+    (when (< (count rules) 10)
+      (throw (ex-info (str "render-html: only " (count rules)
+                           " distinct HARD governor rules fired; this repo's governor implements 12 "
+                           "and the console is supposed to demonstrate the breadth of the gate")
+                      {:rules (vec (sort (map name rules)))})))
+    (when (empty? cs)
+      (throw (ex-info "render-html: no op committed -- a console showing only holds cannot show that the happy path works either" {})))
+    (when (empty? (store/maintenance-history db))
+      (throw (ex-info "render-html: no maintenance draft record was produced" {})))
+    (when (empty? (store/shipment-history db))
+      (throw (ex-info "render-html: no shipment draft record was produced" {})))
+    (when (empty? (store/safety-concerns db))
+      (throw (ex-info "render-html: no safety concern reached the store" {})))
+    (when (empty? (audit-of audit :approval-granted))
+      (throw (ex-info "render-html: no human approval was granted, so the approver-attribution section has nothing to measure" {})))
+    (when (empty? (phase-gate-groups ledger))
+      (throw (ex-info "render-html: the rollout phase gate never held anything, so the page cannot distinguish a governor objection from a phase objection" {})))
+    ledger))
+
+;; ============================== render ==============================
+
+(defn render
+  "Render the whole console from a completed run. `run` is the map
+  `run-demo!` returns; nothing else is consulted."
+  [{:keys [db audit] :as run} vendored-css]
+  (let [ledger (check-run! run)
+        decls (close-over-vars (root-declarations vendored-css) console-tokens)
+        _ (check-css-closure! decls (str (token-block decls) console-css))
+        hs (holds ledger)
+        cs (commits ledger)
+        rules (rule-groups ledger)
+        phase-holds (phase-gate-groups ledger)
+        attribution (approval-attribution db audit)
+        trace (traceability db ledger audit)
+        lost (filterv #(not (:in-record? %)) attribution)]
+    (str
+     "<!DOCTYPE html>\n"
+     "<html lang=\"en\">\n"
+     "<head><meta charset=\"utf-8\">"
+     "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1, viewport-fit=cover\">"
+     "<meta name=\"color-scheme\" content=\"light\">"
+     "<meta name=\"theme-color\" content=\"#ffffff\">"
+     "<title>cloud-itonami-isic-2826 &middot; Operator Console</title>\n"
+     "<style>\n"
+     "/* デジタル庁デザインシステム primitives, extracted at build time from\n"
+     " * this repo's own vendored copy in docs/index.html (jp-go-digital-design-system,\n"
+     " * upstream 3b34f4c3553fa3bee90bfd8b6fe962ac3055107d, MIT, (c) 2025 デジタル庁).\n"
+     " * Only the tokens this console actually references are emitted, plus their\n"
+     " * transitive var() targets; the build fails on a dangling reference. */\n"
+     (token-block decls)
+     console-css
+     "</style></head>\n"
+     "<body>\n"
+     "<header class=\"bar\">\n"
+     "  <h1>Manufacture of machinery for textile, apparel and leather production (ISIC 2826) — Operator Console</h1>\n"
+     "  <span class=\"badge\">read-only sample · governor-gated · draft records only · never actuates equipment · never issues a safety certification</span>\n"
+     "</header>\n"
+     "<main>\n"
+
+     ;; ---------- run summary ----------
+     "  <section class=\"card\">\n"
+     "    <h2>This run</h2>\n"
+     "    <p class=\"muted\">Build-time generated by <code>texmachmfg.render-html</code>"
+     " (<code>clojure -M:dev:render-html</code>) by driving the real actor graph"
+     " — <code>texmachmfg.operation</code> → <code>texmachmfg.governor</code> →"
+     " <code>texmachmfg.store</code> — over the seed"
+     " <code>texmachmfg.store/sample-data!</code> plants. No number below is typed by hand;"
+     " every one is read back out of the store's append-only ledger or the graph's own"
+     " <code>:audit</code> channel after the run. Deterministic: the page carries no clock,"
+     " no random source and no address, so two consecutive builds are byte-identical.</p>\n"
+     "    <ul class=\"stats\">\n"
+     "      <li><b>" (count ledger) "</b><span>ledger facts</span></li>\n"
+     "      <li><b>" (count cs) "</b><span>commits</span></li>\n"
+     "      <li><b>" (count hs) "</b><span>holds (no override)</span></li>\n"
+     "      <li><b>" (count rules) "</b><span>distinct HARD rules fired</span></li>\n"
+     "      <li><b>" (count phase-holds) "</b><span>phase-gate hold reasons</span></li>\n"
+     "      <li><b>" (count (audit-of audit :approval-requested)) "</b><span>escalations to a human</span></li>\n"
+     "      <li><b>" (count (audit-of audit :approval-granted)) "</b><span>approvals granted</span></li>\n"
+     "      <li><b>" (count (audit-of audit :approval-rejected)) "</b><span>approvals refused</span></li>\n"
+     "      <li><b>" (count (proposals audit)) "</b><span>advisor proposals</span></li>\n"
+     "    </ul>\n"
+     "  </section>\n"
+
+     ;; ---------- batches ----------
+     (section
+      "Production batches (SSoT)"
+      (str "The central entity. <code>verified?</code> and <code>registered?</code> are ground truth on the"
+           " batch's own record — the governor re-derives both itself and never believes the advisor's"
+           " rationale about them. Headroom is computed through"
+           " <code>registry/shipment-quantity-exceeded-checkable?</code> first, so an un-computable"
+           " headroom is reported as un-computable rather than as room.")
+      ["Batch" "Product type" "Model" "No-load rpm" "Quantity (units)" "Shipped (units)"
+       "Headroom" "Verified?" "Registered?" "Shipment gate" "Ledger facts"]
+      (batch-rows db ledger))
+
+     ;; ---------- equipment ----------
+     (section
+      "Assembly / test-bench equipment (SSoT)"
+      (str "Scheduling maintenance requires BOTH <code>verified?</code> and <code>registered?</code>"
+           " (<code>registry/equipment-ready?</code>). <code>sew-002</code> is seeded unverified and"
+           " unregistered precisely so the HARD path is exercised, not just described.")
+      ["Equipment" "Kind" "Verified?" "Registered?" "Last maintenance" "Last scheduled" "Maintenance gate"]
+      (equipment-rows db))
+
+     ;; ---------- maintenance ----------
+     (section
+      "Maintenance-schedule DRAFTS committed this run"
+      (str "A draft window a plant coordinator would keep — this actor never actuates a loom, sewing"
+           " machine or leather-cutting machine. Record numbers come from"
+           " <code>registry/register-maintenance</code>; the certificate it mints is always"
+           " <code>draft-unsigned</code> and <code>issued_by_registry: false</code>.")
+      ["Maintenance" "Equipment" "Type" "Scheduled date" "Schedule flag" "Actuation" "Record no." "Draft record"]
+      (maintenance-rows db))
+
+     ;; ---------- shipments ----------
+     (section
+      "Shipment-coordination DRAFTS committed this run"
+      (str "The batch quantity and shipped-to-date columns are the batch's own permanent fields"
+           " AFTER this run's commits — <code>ship-2</code> fills <code>batch-002</code> to exactly"
+           " its recorded quantity, which is legal and is the regression this repo fixed in"
+           " <code>7319be4</code> (comparing the raw double sum read an exact fill as over capacity).")
+      ["Shipment" "Batch" "Units" "Destination" "Batch quantity" "Batch shipped (after)" "Record no." "Draft record"]
+      (shipment-rows db))
+
+     ;; ---------- safety concerns ----------
+     (section
+      "Safety concerns flagged this run"
+      (str "<code>:flag-safety-concern</code> always carries"
+           " <code>:stake :coordination/safety-concern</code>, so it escalates to a human on every"
+           " path regardless of confidence, and it is never gated on the equipment being verified —"
+           " safety reporting is not blocked on an administrative technicality.")
+      ["Concern" "Equipment" "Severity" "Description" "Gate"]
+      (concern-rows db))
+
+     ;; ---------- approver attribution ----------
+     "  <section class=\"card\">\n"
+     "    <h2>Approver attribution — measured, not assumed</h2>\n"
+     "    <p class=\"muted\">For every approval this run actually granted, the renderer walks the"
+     " register the commit wrote and asks whether <code>:approved-by</code> is present."
+     " <b>Measured on this run: " (count lost) " of " (count attribution)
+     " approvals did not survive into the commit record.</b>"
+     (if (seq lost)
+       (str " <code>texmachmfg.operation/commit-record</code> puts the approver on the record's"
+            " <code>:payload</code>, but <code>texmachmfg.store/commit-record!</code> destructures"
+            " <code>:value</code> — so the name is dropped on the way in. The approver below is"
+            " joined back from the graph's <code>:approval-granted</code> audit fact, which is the"
+            " only place it survives (that fact is not appended to the store ledger either; only"
+            " <code>commit-fact</code> is). It is labelled rather than omitted, because a blank cell"
+            " cannot distinguish <em>nobody approved</em> from <em>the store did not keep it</em>."
+            " This section is derived at render time, so it will report"
+            " <em>in commit record</em> by itself once the store is fixed.")
+       " Every approver survived into the commit record.")
+     "</p>\n"
+     "    <table>\n"
+     "      <thead><tr><th>Subject</th><th>Op</th><th>Approver (from audit)</th>"
+     "<th>Store entity</th><th>Approver in commit record?</th></tr></thead>\n"
+     "      <tbody>\n"
+     (str/join "\n" (attribution-rows attribution)) "\n"
+     "      </tbody>\n"
+     "    </table>\n"
+     "  </section>\n"
+
+     ;; ---------- HARD rules ----------
+     (section
+      "HARD governor holds by rule (this run)"
+      (str "Every row is a rule that <code>texmachmfg.governor</code> actually implements and that this"
+           " run actually tripped; the detail column is the governor's own verbatim message, not a"
+           " paraphrase. HARD holds never reach a human — no phase and no approval can override them."
+           " Note <code>:shipment-quantity-exceeded</code> appears with two distinct details: one for"
+           " over-capacity, one for an <em>un-computable</em> headroom, which used to fall through as"
+           " &quot;not over&quot; and ship.")
+      ["Rule" "Class" "Times" "Ops" "Subjects" "Governor detail (verbatim)"]
+      (rule-rows ledger))
+
+     ;; ---------- phase gate holds ----------
+     (section
+      "Rollout-phase holds (this run)"
+      (str "A separate class kept deliberately separate: here the governor raised no violation at all"
+           " and the rollout phase gate still refused the write. Reading these as governor objections"
+           " would misattribute the reason a proposal stopped.")
+      ["Phase reason" "Class" "Times" "Phase" "Ops" "Subjects" "Meaning"]
+      (phase-hold-rows ledger))
+
+     ;; ---------- phase ladder ----------
+     (section
+      "Rollout phase ladder"
+      (str "Projected directly from <code>texmachmfg.phase/phases</code> — not restated here."
+           " <code>:schedule-maintenance</code> is absent from every phase's <code>:auto</code> set"
+           " including phase 3: a permanent structural fact, because a maintenance window means real"
+           " production downtime and the equipment ends up actually touched.")
+      ["Phase" "Label" "Writes allowed" "Auto-commit when clean" "Always needs a human"]
+      (phase-rows))
+
+     ;; ---------- contract ----------
+     (section
+      "Closed allowlists and physical bounds"
+      (str "Projected from <code>texmachmfg.governor</code> and <code>texmachmfg.registry</code> vars"
+           " at build time, so this table cannot drift from the code that enforces it.")
+      ["Contract" "Value" "Violation"]
+      (contract-rows))
+
+     ;; ---------- traceability ----------
+     (section
+      "Traceability — every seed entity to every request that touched it"
+      (str "Joined two independent ways: <em>direct subject</em> where a ledger fact's own"
+           " <code>:subject</code> is the entity id, and <em>advisor :cites</em> where the advisor"
+           " recorded reading that entity while drafting some other subject's proposal. All five ids"
+           " below are seeded by <code>texmachmfg.store/sample-data!</code>; none is invented here.")
+      ["Seed entity" "Joined via" "Request subject" "Op" "Outcome" "Basis"]
+      (traceability-rows trace))
+
+     ;; ---------- advisor proposals ----------
+     (section
+      "Advisor proposals (contained intelligence node)"
+      (str "The TexMachAdvisor is smart-but-untrusted: it proposes and explains, and its rationale is"
+           " never a ground-truth input to any governor check. Shown here so a reader can see what the"
+           " governor was handed versus what it allowed.")
+      ["Op" "Subject" "Confidence" "Cites" "Summary" "Rationale (NOT trusted)"]
+      (proposal-rows audit))
+
+     ;; ---------- ledger ----------
+     (section
+      "Audit ledger (append-only, this run)"
+      (str "The whole immutable decision log the run wrote, in order. Every commit, every hold, and"
+           " the basis each one rests on.")
+      ["#" "Fact" "Op" "Subject" "Actor" "Disposition" "Confidence" "Basis" "Summary"]
+      (ledger-rows ledger))
+
+     "</main>\n"
+     "<footer>\n"
+     "  <p>Generated by <code>texmachmfg.render-html</code> from a live run of this repo's own actor"
+     " stack. This actor coordinates back-office records only: it never actuates assembly or"
+     " test-bench equipment, never dispatches a real freight carrier, and is never the certification"
+     " body that issues a machinery safety mark (e.g. CE marking under the EU Machinery Directive).</p>\n"
+     "</footer>\n"
+     "</body>\n</html>\n")))
+
+(defn -main [& args]
+  (let [out (or (first args) "docs/samples/operator-console.html")
+        vendored (slurp vendored-css-path)
+        run (run-demo!)
+        html (render run vendored)
+        ledger (vec (store/ledger (:db run)))
+        rules (sort (map name (set (mapcat violation-rules (holds ledger)))))]
+    (.mkdirs (java.io.File. (or (.getParent (java.io.File. ^String out)) ".")))
+    (spit out html)
+    (println "wrote" out (str "(" (count html) " bytes)"))
+    (println " " (count ledger) "ledger facts,"
+             (count (commits ledger)) "commits,"
+             (count (holds ledger)) "holds")
+    (println " " (count rules) "distinct HARD rules:" (str/join ", " rules))
+    (println " " (count (store/maintenance-history (:db run))) "maintenance drafts,"
+             (count (store/shipment-history (:db run))) "shipment drafts,"
+             (count (store/safety-concerns (:db run))) "safety concerns")))
