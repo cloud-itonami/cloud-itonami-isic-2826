@@ -572,7 +572,7 @@
        "    </table>\n"
        "  </section>\n"))
 
-(defn- num [v] (str "<td class=\"num\">" (esc v) "</td>"))
+(defn- numcell [v] (str "<td class=\"num\">" (esc v) "</td>"))
 
 ;; ============================== sections ==============================
 
@@ -582,10 +582,10 @@
       (str "        <tr><td>" (code (:id b)) "</td>"
            "<td>" (code (kw (:product-type b))) "</td>"
            "<td>" (esc (:model b)) "</td>"
-           (num (:no-load-run-speed-rpm b))
-           (num (:quantity-units b))
-           (num (:shipped-units b))
-           (num (if (:checkable? h) (:value h) "un-computable"))
+           (numcell (:no-load-run-speed-rpm b))
+           (numcell (:quantity-units b))
+           (numcell (:shipped-units b))
+           (numcell (if (:checkable? h) (:value h) "un-computable"))
            "<td>" (yes-no (registry/batch-verified? b)) "</td>"
            "<td>" (yes-no (registry/batch-registered? b)) "</td>"
            "<td>" (if (registry/batch-ready? b)
@@ -646,10 +646,10 @@
             b (store/batch db (:batch-id s))]
         (str "        <tr><td>" (code (:id s)) "</td>"
              "<td>" (code (:batch-id s)) "</td>"
-             (num (:units s))
+             (numcell (:units s))
              "<td>" (esc (:destination s)) "</td>"
-             (num (:quantity-units b))
-             (num (:shipped-units b))
+             (numcell (:quantity-units b))
+             (numcell (:shipped-units b))
              "<td>" (code (:shipment-number s)) "</td>"
              "<td>" (if d
                       (str (code (get d "kind")) " "
@@ -703,7 +703,7 @@
   (for [{:keys [rule ops subjects details] n :count} (rule-groups ledger)]
     (str "        <tr><td>" (code (kw rule)) "</td>"
          "<td>" (pill "critical" "HARD") "</td>"
-         (num n)
+         (numcell n)
          "<td>" (join-codes ops) "</td>"
          "<td>" (join-codes subjects) "</td>"
          "<td>" (str/join "<br>" (map esc details)) "</td></tr>")))
@@ -712,7 +712,7 @@
   (for [{:keys [reason phases subjects ops] n :count} (phase-gate-groups ledger)]
     (str "        <tr><td>" (code (kw reason)) "</td>"
          "<td>" (pill "warn" "phase gate") "</td>"
-         (num n)
+         (numcell n)
          "<td>" (join-codes phases) "</td>"
          "<td>" (join-codes ops) "</td>"
          "<td>" (join-codes subjects) "</td>"
@@ -747,7 +747,7 @@
 (defn- ledger-rows [ledger]
   (map-indexed
    (fn [i {:keys [t op actor subject disposition basis confidence phase-reason phase summary]}]
-     (str "        <tr>" (num (inc i))
+     (str "        <tr>" (numcell (inc i))
           "<td>" (code (kw t)) "</td>"
           "<td>" (code (kw op)) "</td>"
           "<td>" (code subject) "</td>"
@@ -755,7 +755,7 @@
           "<td>" (if (= :commit disposition)
                    (pill "ok" "commit")
                    (pill "critical" (kw disposition))) "</td>"
-          (num confidence)
+          (numcell confidence)
           "<td>" (if (seq basis)
                    (join-codes basis)
                    (if phase-reason
@@ -769,7 +769,7 @@
   (for [{:keys [op subject summary rationale cites confidence]} (proposals audit)]
     (str "        <tr><td>" (code (kw op)) "</td>"
          "<td>" (code subject) "</td>"
-         (num confidence)
+         (numcell confidence)
          "<td>" (join-codes cites) "</td>"
          "<td>" (esc summary) "</td>"
          "<td>" (esc rationale) "</td></tr>")))
