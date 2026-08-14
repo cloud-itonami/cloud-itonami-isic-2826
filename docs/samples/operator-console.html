@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><meta name="color-scheme" content="light"><meta name="theme-color" content="#ffffff"><title>cloud-itonami-isic-2826 &middot; Operator Console</title>
+<style>
+/* デジタル庁デザインシステム primitives, extracted at build time from
+ * this repo's own vendored copy in docs/index.html (jp-go-digital-design-system,
+ * upstream 3b34f4c3553fa3bee90bfd8b6fe962ac3055107d, MIT, (c) 2025 デジタル庁).
+ * Only the tokens this console actually references are emitted, plus their
+ * transitive var() targets; the build fails on a dangling reference. */
+:root {
+  --color-neutral-solid-gray-100: #e6e6e6;
+  --color-neutral-solid-gray-200: #cccccc;
+  --color-neutral-solid-gray-300: #b3b3b3;
+  --color-neutral-solid-gray-50: #f2f2f2;
+  --color-neutral-solid-gray-600: #666666;
+  --color-neutral-solid-gray-700: #4d4d4d;
+  --color-neutral-solid-gray-800: #333333;
+  --color-neutral-solid-gray-900: #1a1a1a;
+  --color-neutral-white: #ffffff;
+  --color-primitive-blue-50: #e8f1fe;
+  --color-primitive-blue-900: #0017c1;
+  --color-primitive-green-1000: #0c472a;
+  --color-primitive-green-50: #e6f5ec;
+  --color-primitive-red-1000: #a90000;
+  --color-primitive-red-50: #fdeeee;
+  --color-primitive-yellow-1100: #6e5600;
+  --color-primitive-yellow-50: #fbf5e0;
+  --font-family-mono: "Noto Sans Mono", monospace;
+  --font-family-sans: "Noto Sans JP", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; }
+body { margin: 0; background: var(--color-neutral-solid-gray-50); color: var(--color-neutral-solid-gray-800); font-family: var(--font-family-sans); line-height: 1.7; }
+header.bar { background: var(--color-neutral-white); border-bottom: 1px solid var(--color-neutral-solid-gray-200); padding: 2rem 1.5rem 1.5rem; }
+header.bar h1 { margin: 0 0 .75rem; font-size: 1.5rem; line-height: 1.4; color: var(--color-neutral-solid-gray-900); }
+.badge { display: inline-block; background: var(--color-primitive-blue-50); color: var(--color-primitive-blue-900); border-radius: 999px; padding: .25rem .875rem; font-size: .8125rem; }
+main { max-width: 72rem; margin-inline: auto; padding: 1.5rem 1.5rem 4rem; }
+section.card { background: var(--color-neutral-white); border: 1px solid var(--color-neutral-solid-gray-200); border-radius: 12px; padding: 1.5rem; margin-bottom: 1.5rem; overflow-x: auto; }
+section.card h2 { margin: 0 0 .5rem; font-size: 1.125rem; color: var(--color-neutral-solid-gray-900); }
+p.muted { margin: 0 0 1rem; color: var(--color-neutral-solid-gray-600); font-size: .875rem; line-height: 1.8; }
+table { border-collapse: collapse; width: 100%; font-size: .875rem; }
+th, td { text-align: left; vertical-align: top; padding: .5rem .625rem; border-bottom: 1px solid var(--color-neutral-solid-gray-100); }
+thead th { border-bottom: 2px solid var(--color-neutral-solid-gray-300); color: var(--color-neutral-solid-gray-700); font-size: .8125rem; white-space: nowrap; }
+tbody tr:last-child td { border-bottom: none; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+code { font-family: var(--font-family-mono); background: var(--color-neutral-solid-gray-50); border: 1px solid var(--color-neutral-solid-gray-200); border-radius: 4px; padding: 1px 5px; font-size: .9em; }
+.pill { display: inline-block; border-radius: 999px; padding: .0625rem .5rem; font-size: .75rem; white-space: nowrap; }
+.ok { background: var(--color-primitive-green-50); color: var(--color-primitive-green-1000); }
+.critical { background: var(--color-primitive-red-50); color: var(--color-primitive-red-1000); }
+.warn { background: var(--color-primitive-yellow-50); color: var(--color-primitive-yellow-1100); }
+.info { background: var(--color-primitive-blue-50); color: var(--color-primitive-blue-900); }
+.muted-pill { background: var(--color-neutral-solid-gray-50); color: var(--color-neutral-solid-gray-700); }
+.stats { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0; padding: 0; list-style: none; }
+.stats li { border: 1px solid var(--color-neutral-solid-gray-200); border-radius: 10px; padding: .75rem 1rem; min-width: 9rem; }
+.stats b { display: block; font-size: 1.5rem; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--color-neutral-solid-gray-900); }
+.stats span { font-size: .8125rem; color: var(--color-neutral-solid-gray-600); }
+footer { max-width: 72rem; margin-inline: auto; padding: 0 1.5rem 3rem; font-size: .8125rem; color: var(--color-neutral-solid-gray-600); }
+</style></head>
+<body>
+<header class="bar">
+  <h1>Manufacture of machinery for textile, apparel and leather production (ISIC 2826) — Operator Console</h1>
+  <span class="badge">read-only sample · governor-gated · draft records only · never actuates equipment · never issues a safety certification</span>
+</header>
+<main>
+  <section class="card">
+    <h2>This run</h2>
+    <p class="muted">Build-time generated by <code>texmachmfg.render-html</code> (<code>clojure -M:dev:render-html</code>) by driving the real actor graph — <code>texmachmfg.operation</code> → <code>texmachmfg.governor</code> → <code>texmachmfg.store</code> — over the seed <code>texmachmfg.store/sample-data!</code> plants. No number below is typed by hand; every one is read back out of the store's append-only ledger or the graph's own <code>:audit</code> channel after the run. Deterministic: the page carries no clock, no random source and no address, so two consecutive builds are byte-identical.</p>
+    <ul class="stats">
+      <li><b>19</b><span>ledger facts</span></li>
+      <li><b>5</b><span>commits</span></li>
+      <li><b>14</b><span>holds (no override)</span></li>
+      <li><b>13</b><span>distinct HARD rules fired</span></li>
+      <li><b>1</b><span>phase-gate hold reasons</span></li>
+      <li><b>5</b><span>escalations to a human</span></li>
+      <li><b>4</b><span>approvals granted</span></li>
+      <li><b>1</b><span>approvals refused</span></li>
+      <li><b>19</b><span>advisor proposals</span></li>
+    </ul>
+  </section>
+  <section class="card">
+    <h2>Production batches (SSoT)</h2>
+    <p class="muted">The central entity. <code>verified?</code> and <code>registered?</code> are ground truth on the batch's own record — the governor re-derives both itself and never believes the advisor's rationale about them. Headroom is computed through <code>registry/shipment-quantity-exceeded-checkable?</code> first, so an un-computable headroom is reported as un-computable rather than as room.</p>
+    <table>
+      <thead><tr><th>Batch</th><th>Product type</th><th>Model</th><th>No-load rpm</th><th>Quantity (units)</th><th>Shipped (units)</th><th>Headroom</th><th>Verified?</th><th>Registered?</th><th>Shipment gate</th><th>Ledger facts</th></tr></thead>
+      <tbody>
+        <tr><td><code>batch-001</code></td><td><code>weaving-loom</code></td><td>WVL-220CM</td><td class="num">600.0</td><td class="num">1000.0</td><td class="num">250.0</td><td class="num">750.0</td><td><span class="pill ok">yes</span></td><td><span class="pill ok">yes</span></td><td><span class="pill ok">shippable</span></td><td>8</td></tr>
+        <tr><td><code>batch-002</code></td><td><code>sewing-machine</code></td><td>SWM-9000</td><td class="num">5000.0</td><td class="num">300.0</td><td class="num">300.0</td><td class="num">0.0</td><td><span class="pill ok">yes</span></td><td><span class="pill ok">yes</span></td><td><span class="pill ok">shippable</span></td><td>0</td></tr>
+        <tr><td><code>batch-003</code></td><td><code>leather-cutting-machine</code></td><td>LCM-450</td><td class="num">800.0</td><td class="num">5000.0</td><td class="num">0.0</td><td class="num">5000.0</td><td><span class="pill critical">no</span></td><td><span class="pill critical">no</span></td><td><span class="pill critical">blocked — batch-not-verified</span></td><td>0</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Assembly / test-bench equipment (SSoT)</h2>
+    <p class="muted">Scheduling maintenance requires BOTH <code>verified?</code> and <code>registered?</code> (<code>registry/equipment-ready?</code>). <code>sew-002</code> is seeded unverified and unregistered precisely so the HARD path is exercised, not just described.</p>
+    <table>
+      <thead><tr><th>Equipment</th><th>Kind</th><th>Verified?</th><th>Registered?</th><th>Last maintenance</th><th>Last scheduled</th><th>Maintenance gate</th></tr></thead>
+      <tbody>
+        <tr><td><code>loom-001</code></td><td><code>loom-assembly-line</code></td><td><span class="pill ok">yes</span></td><td><span class="pill ok">yes</span></td><td>2026-05-01</td><td>2026-08-01</td><td><span class="pill ok">schedulable</span></td></tr>
+        <tr><td><code>sew-002</code></td><td><code>sewing-machine-test-bench</code></td><td><span class="pill critical">no</span></td><td><span class="pill critical">no</span></td><td><span class="pill muted-pill">none on file</span></td><td><span class="pill muted-pill">none</span></td><td><span class="pill critical">blocked — equipment-not-verified</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Maintenance-schedule DRAFTS committed this run</h2>
+    <p class="muted">A draft window a plant coordinator would keep — this actor never actuates a loom, sewing machine or leather-cutting machine. Record numbers come from <code>registry/register-maintenance</code>; the certificate it mints is always <code>draft-unsigned</code> and <code>issued_by_registry: false</code>.</p>
+    <table>
+      <thead><tr><th>Maintenance</th><th>Equipment</th><th>Type</th><th>Scheduled date</th><th>Schedule flag</th><th>Actuation</th><th>Record no.</th><th>Draft record</th></tr></thead>
+      <tbody>
+        <tr><td><code>mnt-1</code></td><td><code>loom-001</code></td><td><code>heddle-inspection</code></td><td>2026-08-01</td><td><span class="pill ok">scheduled</span></td><td><span class="pill ok">draft only — no actuation</span></td><td><code>MNT-000000</code></td><td><code>maintenance-schedule-draft</code> <span class="pill ok">immutable</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Shipment-coordination DRAFTS committed this run</h2>
+    <p class="muted">The batch quantity and shipped-to-date columns are the batch's own permanent fields AFTER this run's commits — <code>ship-2</code> fills <code>batch-002</code> to exactly its recorded quantity, which is legal and is the regression this repo fixed in <code>7319be4</code> (comparing the raw double sum read an exact fill as over capacity).</p>
+    <table>
+      <thead><tr><th>Shipment</th><th>Batch</th><th>Units</th><th>Destination</th><th>Batch quantity</th><th>Batch shipped (after)</th><th>Record no.</th><th>Draft record</th></tr></thead>
+      <tbody>
+        <tr><td><code>ship-1</code></td><td><code>batch-001</code></td><td class="num">50.0</td><td>buyer-yard-north</td><td class="num">1000.0</td><td class="num">250.0</td><td><code>SHP-000000</code></td><td><code>shipment-coordination-draft</code> <span class="pill ok">immutable</span></td></tr>
+        <tr><td><code>ship-2</code></td><td><code>batch-002</code></td><td class="num">20.0</td><td>buyer-yard-west</td><td class="num">300.0</td><td class="num">300.0</td><td><code>SHP-000001</code></td><td><code>shipment-coordination-draft</code> <span class="pill ok">immutable</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Safety concerns flagged this run</h2>
+    <p class="muted"><code>:flag-safety-concern</code> always carries <code>:stake :coordination/safety-concern</code>, so it escalates to a human on every path regardless of confidence, and it is never gated on the equipment being verified — safety reporting is not blocked on an administrative technicality.</p>
+    <table>
+      <thead><tr><th>Concern</th><th>Equipment</th><th>Severity</th><th>Description</th><th>Gate</th></tr></thead>
+      <tbody>
+        <tr><td><code>concern-1</code></td><td><code>loom-001</code></td><td><span class="pill warn">moderate</span></td><td>シャトル部の異常振動、安全ガードの緩み</td><td><span class="pill info">always human-approved</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Approver attribution — measured, not assumed</h2>
+    <p class="muted">For every approval this run actually granted, the renderer walks the register the commit wrote and asks whether <code>:approved-by</code> is present. <b>Measured on this run: 4 of 4 approvals did not survive into the commit record.</b> <code>texmachmfg.operation/commit-record</code> puts the approver on the record's <code>:payload</code>, but <code>texmachmfg.store/commit-record!</code> destructures <code>:value</code> — so the name is dropped on the way in. The approver below is joined back from the graph's <code>:approval-granted</code> audit fact, which is the only place it survives (that fact is not appended to the store ledger either; only <code>commit-fact</code> is). It is labelled rather than omitted, because a blank cell cannot distinguish <em>nobody approved</em> from <em>the store did not keep it</em>. This section is derived at render time, so it will report <em>in commit record</em> by itself once the store is fixed.</p>
+    <table>
+      <thead><tr><th>Subject</th><th>Op</th><th>Approver (from audit)</th><th>Store entity</th><th>Approver in commit record?</th></tr></thead>
+      <tbody>
+        <tr><td><code>mnt-1</code></td><td><code>schedule-maintenance</code></td><td><code>coord-1</code></td><td><span class="pill ok">written</span></td><td><span class="pill warn">audit only — not in commit record</span></td></tr>
+        <tr><td><code>concern-1</code></td><td><code>flag-safety-concern</code></td><td><code>safety-supervisor-1</code></td><td><span class="pill ok">written</span></td><td><span class="pill warn">audit only — not in commit record</span></td></tr>
+        <tr><td><code>ship-1</code></td><td><code>coordinate-shipment</code></td><td><code>ship-approver-1</code></td><td><span class="pill ok">written</span></td><td><span class="pill warn">audit only — not in commit record</span></td></tr>
+        <tr><td><code>ship-2</code></td><td><code>coordinate-shipment</code></td><td><code>ship-approver-1</code></td><td><span class="pill ok">written</span></td><td><span class="pill warn">audit only — not in commit record</span></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>HARD governor holds by rule (this run)</h2>
+    <p class="muted">Every row is a rule that <code>texmachmfg.governor</code> actually implements and that this run actually tripped; the detail column is the governor's own verbatim message, not a paraphrase. HARD holds never reach a human — no phase and no approval can override them. Note <code>:shipment-quantity-exceeded</code> appears with two distinct details: one for over-capacity, one for an <em>un-computable</em> headroom, which used to fall through as &quot;not over&quot; and ship.</p>
+    <table>
+      <thead><tr><th>Rule</th><th>Class</th><th>Times</th><th>Ops</th><th>Subjects</th><th>Governor detail (verbatim)</th></tr></thead>
+      <tbody>
+        <tr><td><code>already-scheduled</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>schedule-maintenance</code></td><td><code>mnt-1</code></td><td>mnt-1 は既にスケジュール済み</td></tr>
+        <tr><td><code>approver-rejected</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>schedule-maintenance</code></td><td><code>mnt-4</code></td><td></td></tr>
+        <tr><td><code>batch-not-verified</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>coordinate-shipment</code></td><td><code>ship-3</code></td><td>batch-003 は未検証または未登録、もしくは存在しない -- 検証済み・登録済みバッチ記録が無い状態での出荷調整提案</td></tr>
+        <tr><td><code>certification-authority-blocked</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td>機械安全認証(CE等)の自己発行提案は恒久的に禁止 -- 認証機関の専権事項</td></tr>
+        <tr><td><code>equipment-actuate-blocked</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>schedule-maintenance</code></td><td><code>mnt-3</code></td><td>織機・ミシン・皮革裁断機等の試験設備の直接操作(actuate)提案は恒久的に禁止 -- 提案(draft)のみ許可</td></tr>
+        <tr><td><code>equipment-control-blocked</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>actuate-assembly-line</code></td><td><code>batch-001</code></td><td>proposal :effect (:noop) は織機・ミシン・皮革裁断機等の試験設備の直接操作に該当する可能性があり、恒久的に禁止</td></tr>
+        <tr><td><code>equipment-not-verified</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>schedule-maintenance</code></td><td><code>mnt-2</code></td><td>sew-002 は未検証または未登録、もしくは存在しない -- 検証済み・登録済み設備記録が無い状態での保守作業予定提案</td></tr>
+        <tr><td><code>invalid-defect-rate</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td>999.0% は物理的に妥当な不良率の範囲外</td></tr>
+        <tr><td><code>invalid-no-load-run-speed</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td>999999.0rpm は物理的に妥当な無負荷試運転速度の範囲外</td></tr>
+        <tr><td><code>invalid-product-type</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td>:unobtainium は既知の product-type 値ではない</td></tr>
+        <tr><td><code>not-propose-effect</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td>request :effect は :propose のみ許可 (受信値: :direct-write)</td></tr>
+        <tr><td><code>shipment-quantity-exceeded</code></td><td><span class="pill critical">HARD</span></td><td class="num">2</td><td><code>coordinate-shipment</code></td><td><code>ship-4</code> <code>ship-5</code></td><td>batch-002 の記録済み生産数量(300.0台)を、既存出荷実績(300.0台)+今回申請(100.0台)が超過<br>生産量/既存出荷実績/申請量のいずれかが数値として確定できない -- 空き容量を検算できないため出荷しない</td></tr>
+        <tr><td><code>unknown-op</code></td><td><span class="pill critical">HARD</span></td><td class="num">1</td><td><code>actuate-assembly-line</code></td><td><code>batch-001</code></td><td>:actuate-assembly-line はこの actor が扱う操作の許可リストに無い</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Rollout-phase holds (this run)</h2>
+    <p class="muted">A separate class kept deliberately separate: here the governor raised no violation at all and the rollout phase gate still refused the write. Reading these as governor objections would misattribute the reason a proposal stopped.</p>
+    <table>
+      <thead><tr><th>Phase reason</th><th>Class</th><th>Times</th><th>Phase</th><th>Ops</th><th>Subjects</th><th>Meaning</th></tr></thead>
+      <tbody>
+        <tr><td><code>phase-disabled</code></td><td><span class="pill warn">phase gate</span></td><td class="num">1</td><td><code>0</code></td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td>governor raised no violation; the rollout phase had not enabled this write yet</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Rollout phase ladder</h2>
+    <p class="muted">Projected directly from <code>texmachmfg.phase/phases</code> — not restated here. <code>:schedule-maintenance</code> is absent from every phase's <code>:auto</code> set including phase 3: a permanent structural fact, because a maintenance window means real production downtime and the equipment ends up actually touched.</p>
+    <table>
+      <thead><tr><th>Phase</th><th>Label</th><th>Writes allowed</th><th>Auto-commit when clean</th><th>Always needs a human</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td><code>read-only</code></td><td><span class="pill muted-pill">—</span></td><td><span class="pill muted-pill">—</span></td><td><span class="pill muted-pill">—</span></td></tr>
+        <tr><td>1</td><td><code>assisted-intake</code></td><td><code>log-production-batch</code></td><td><span class="pill muted-pill">—</span></td><td><code>log-production-batch</code></td></tr>
+        <tr><td>2</td><td><code>assisted-coordinate</code></td><td><code>coordinate-shipment</code> <code>flag-safety-concern</code> <code>log-production-batch</code></td><td><span class="pill muted-pill">—</span></td><td><code>coordinate-shipment</code> <code>flag-safety-concern</code> <code>log-production-batch</code></td></tr>
+        <tr><td>3 <span class="pill info">default</span></td><td><code>supervised-auto</code></td><td><code>coordinate-shipment</code> <code>flag-safety-concern</code> <code>log-production-batch</code> <code>schedule-maintenance</code></td><td><code>log-production-batch</code></td><td><code>coordinate-shipment</code> <code>flag-safety-concern</code> <code>schedule-maintenance</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Closed allowlists and physical bounds</h2>
+    <p class="muted">Projected from <code>texmachmfg.governor</code> and <code>texmachmfg.registry</code> vars at build time, so this table cannot drift from the code that enforces it.</p>
+    <table>
+      <thead><tr><th>Contract</th><th>Value</th><th>Violation</th></tr></thead>
+      <tbody>
+        <tr><td>closed op allowlist</td><td><code>coordinate-shipment</code> <code>flag-safety-concern</code> <code>log-production-batch</code> <code>schedule-maintenance</code></td><td>any other <code>:op</code> → HARD <code>:unknown-op</code></td></tr>
+        <tr><td>closed proposal-effect allowlist</td><td><code>flag</code> <code>propose</code> <code>schedule</code> <code>upsert</code></td><td>any other <code>:effect</code> → HARD <code>:equipment-control-blocked</code> (permanent)</td></tr>
+        <tr><td>always-human stakes</td><td><code>safety-concern</code></td><td>escalates regardless of confidence</td></tr>
+        <tr><td>confidence floor</td><td><code>0.6</code></td><td>below floor → escalate to a human plant supervisor (SOFT)</td></tr>
+        <tr><td>known product types</td><td><code>fabric-cutting-machine</code> <code>knitting-machine</code> <code>leather-cutting-machine</code> <code>sewing-machine</code> <code>weaving-loom</code></td><td>any other → HARD <code>:invalid-product-type</code></td></tr>
+        <tr><td>no-load run-speed bounds</td><td><code>0.0 rpm</code> – <code>8000.0 rpm</code></td><td>outside → HARD <code>:invalid-no-load-run-speed</code></td></tr>
+        <tr><td>defect-rate bounds</td><td><code>0.0 %</code> – <code>100.0 %</code></td><td>outside → HARD <code>:invalid-defect-rate</code></td></tr>
+        <tr><td>never auto at any phase</td><td><code>coordinate-shipment</code> <code>flag-safety-concern</code> <code>schedule-maintenance</code></td><td>structural, not a rollout milestone still to come</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Traceability — every seed entity to every request that touched it</h2>
+    <p class="muted">Joined two independent ways: <em>direct subject</em> where a ledger fact's own <code>:subject</code> is the entity id, and <em>advisor :cites</em> where the advisor recorded reading that entity while drafting some other subject's proposal. All five ids below are seeded by <code>texmachmfg.store/sample-data!</code>; none is invented here.</p>
+    <table>
+      <thead><tr><th>Seed entity</th><th>Joined via</th><th>Request subject</th><th>Op</th><th>Outcome</th><th>Basis</th></tr></thead>
+      <tbody>
+        <tr><td><code>batch-001</code></td><td><span class="pill info">direct subject</span></td><td><code>batch-001</code></td><td><code>log-production-batch</code></td><td><span class="pill ok">committed</span></td><td><code>product-type</code> <code>last-assessed</code></td></tr>
+        <tr><td><code>batch-001</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>ship-1</code></td><td><code>coordinate-shipment</code></td><td><span class="pill ok">committed</span></td><td><code>batch-001</code></td></tr>
+        <tr><td><code>batch-001</code></td><td><span class="pill info">direct subject</span></td><td><code>batch-001</code></td><td><code>log-production-batch</code></td><td><span class="pill critical">governor-hold</span></td><td><code>not-propose-effect</code></td></tr>
+        <tr><td><code>batch-001</code></td><td><span class="pill info">direct subject</span></td><td><code>batch-001</code></td><td><code>actuate-assembly-line</code></td><td><span class="pill critical">governor-hold</span></td><td><code>unknown-op</code> <code>equipment-control-blocked</code></td></tr>
+        <tr><td><code>batch-001</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>ship-5</code></td><td><code>coordinate-shipment</code></td><td><span class="pill critical">governor-hold</span></td><td><code>shipment-quantity-exceeded</code></td></tr>
+        <tr><td><code>batch-001</code></td><td><span class="pill info">direct subject</span></td><td><code>batch-001</code></td><td><code>log-production-batch</code></td><td><span class="pill critical">governor-hold</span></td><td><code>invalid-product-type</code></td></tr>
+        <tr><td><code>batch-001</code></td><td><span class="pill info">direct subject</span></td><td><code>batch-001</code></td><td><code>log-production-batch</code></td><td><span class="pill critical">governor-hold</span></td><td><code>invalid-no-load-run-speed</code></td></tr>
+        <tr><td><code>batch-001</code></td><td><span class="pill info">direct subject</span></td><td><code>batch-001</code></td><td><code>log-production-batch</code></td><td><span class="pill critical">governor-hold</span></td><td><code>invalid-defect-rate</code></td></tr>
+        <tr><td><code>batch-001</code></td><td><span class="pill info">direct subject</span></td><td><code>batch-001</code></td><td><code>log-production-batch</code></td><td><span class="pill critical">governor-hold</span></td><td><code>certification-authority-blocked</code></td></tr>
+        <tr><td><code>batch-001</code></td><td><span class="pill info">direct subject</span></td><td><code>batch-001</code></td><td><code>log-production-batch</code></td><td><span class="pill critical">governor-hold</span></td><td><code>phase-disabled</code></td></tr>
+        <tr><td><code>batch-002</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>ship-2</code></td><td><code>coordinate-shipment</code></td><td><span class="pill ok">committed</span></td><td><code>batch-002</code></td></tr>
+        <tr><td><code>batch-002</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>ship-4</code></td><td><code>coordinate-shipment</code></td><td><span class="pill critical">governor-hold</span></td><td><code>shipment-quantity-exceeded</code></td></tr>
+        <tr><td><code>batch-003</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>ship-3</code></td><td><code>coordinate-shipment</code></td><td><span class="pill critical">governor-hold</span></td><td><code>batch-not-verified</code></td></tr>
+        <tr><td><code>loom-001</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>mnt-1</code></td><td><code>schedule-maintenance</code></td><td><span class="pill ok">committed</span></td><td><code>loom-001</code></td></tr>
+        <tr><td><code>loom-001</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>concern-1</code></td><td><code>flag-safety-concern</code></td><td><span class="pill ok">committed</span></td><td><code>loom-001</code></td></tr>
+        <tr><td><code>loom-001</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>mnt-3</code></td><td><code>schedule-maintenance</code></td><td><span class="pill critical">governor-hold</span></td><td><code>equipment-actuate-blocked</code></td></tr>
+        <tr><td><code>loom-001</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>mnt-1</code></td><td><code>schedule-maintenance</code></td><td><span class="pill critical">governor-hold</span></td><td><code>already-scheduled</code></td></tr>
+        <tr><td><code>loom-001</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>mnt-4</code></td><td><code>schedule-maintenance</code></td><td><span class="pill critical">approval-rejected</span></td><td><code>approver-rejected</code></td></tr>
+        <tr><td><code>sew-002</code></td><td><span class="pill muted-pill">advisor :cites</span></td><td><code>mnt-2</code></td><td><code>schedule-maintenance</code></td><td><span class="pill critical">governor-hold</span></td><td><code>equipment-not-verified</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Advisor proposals (contained intelligence node)</h2>
+    <p class="muted">The TexMachAdvisor is smart-but-untrusted: it proposes and explains, and its rationale is never a ground-truth input to any governor check. Shown here so a reader can see what the governor was handed versus what it allowed.</p>
+    <table>
+      <thead><tr><th>Op</th><th>Subject</th><th>Confidence</th><th>Cites</th><th>Summary</th><th>Rationale (NOT trusted)</th></tr></thead>
+      <tbody>
+        <tr><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td class="num">0.95</td><td><code>product-type</code> <code>last-assessed</code></td><td>生産バッチ記録更新: (:product-type :last-assessed)</td><td>入力patchの正規化のみ。新規事実の生成なし。</td></tr>
+        <tr><td><code>schedule-maintenance</code></td><td><code>mnt-1</code></td><td class="num">0.9</td><td><code>loom-001</code></td><td>mnt-1 向け保守作業予定提案 (:heddle-inspection) equipment=loom-001</td><td>equipment-verified?=true equipment-registered?=true actuate-equipment?=false</td></tr>
+        <tr><td><code>flag-safety-concern</code></td><td><code>concern-1</code></td><td class="num">0.9</td><td><code>loom-001</code></td><td>concern-1 向け安全懸念報告 (:moderate) equipment=loom-001</td><td>severity=:moderate description=シャトル部の異常振動、安全ガードの緩み</td></tr>
+        <tr><td><code>coordinate-shipment</code></td><td><code>ship-1</code></td><td class="num">0.9</td><td><code>batch-001</code></td><td>ship-1 向け出荷調整提案 (50.0 台) batch=batch-001</td><td>batch-verified?=true batch-registered?=true over-quantity?=false</td></tr>
+        <tr><td><code>coordinate-shipment</code></td><td><code>ship-2</code></td><td class="num">0.9</td><td><code>batch-002</code></td><td>ship-2 向け出荷調整提案 (20.0 台) batch=batch-002</td><td>batch-verified?=true batch-registered?=true over-quantity?=false</td></tr>
+        <tr><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td class="num">0.95</td><td><code>product-type</code></td><td>生産バッチ記録更新: (:product-type)</td><td>入力patchの正規化のみ。新規事実の生成なし。</td></tr>
+        <tr><td><code>actuate-assembly-line</code></td><td><code>batch-001</code></td><td class="num">0.0</td><td><span class="pill muted-pill">—</span></td><td>未対応の操作</td><td>:actuate-assembly-line</td></tr>
+        <tr><td><code>schedule-maintenance</code></td><td><code>mnt-2</code></td><td class="num">0.3</td><td><code>sew-002</code></td><td>mnt-2 向け保守作業予定提案 (:calibration) equipment=sew-002</td><td>equipment-verified?=false equipment-registered?=false actuate-equipment?=false</td></tr>
+        <tr><td><code>coordinate-shipment</code></td><td><code>ship-3</code></td><td class="num">0.3</td><td><code>batch-003</code></td><td>ship-3 向け出荷調整提案 (100.0 台) batch=batch-003</td><td>batch-verified?=false batch-registered?=false over-quantity?=false</td></tr>
+        <tr><td><code>coordinate-shipment</code></td><td><code>ship-4</code></td><td class="num">0.3</td><td><code>batch-002</code></td><td>ship-4 向け出荷調整提案 (100.0 台) batch=batch-002</td><td>batch-verified?=true batch-registered?=true over-quantity?=true</td></tr>
+        <tr><td><code>coordinate-shipment</code></td><td><code>ship-5</code></td><td class="num">0.9</td><td><code>batch-001</code></td><td>ship-5 向け出荷調整提案 ( 台) batch=batch-001</td><td>batch-verified?=true batch-registered?=true over-quantity?=false</td></tr>
+        <tr><td><code>schedule-maintenance</code></td><td><code>mnt-3</code></td><td class="num">0.3</td><td><code>loom-001</code></td><td>mnt-3 向け保守作業予定提案 (:force-run) equipment=loom-001</td><td>equipment-verified?=true equipment-registered?=true actuate-equipment?=true</td></tr>
+        <tr><td><code>schedule-maintenance</code></td><td><code>mnt-1</code></td><td class="num">0.9</td><td><code>loom-001</code></td><td>mnt-1 向け保守作業予定提案 (:heddle-inspection) equipment=loom-001</td><td>equipment-verified?=true equipment-registered?=true actuate-equipment?=false</td></tr>
+        <tr><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td class="num">0.95</td><td><code>product-type</code></td><td>生産バッチ記録更新: (:product-type)</td><td>入力patchの正規化のみ。新規事実の生成なし。</td></tr>
+        <tr><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td class="num">0.95</td><td><code>no-load-run-speed-rpm</code></td><td>生産バッチ記録更新: (:no-load-run-speed-rpm)</td><td>入力patchの正規化のみ。新規事実の生成なし。</td></tr>
+        <tr><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td class="num">0.95</td><td><code>defect-rate-percent</code></td><td>生産バッチ記録更新: (:defect-rate-percent)</td><td>入力patchの正規化のみ。新規事実の生成なし。</td></tr>
+        <tr><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td class="num">0.95</td><td><code>issue-certification?</code></td><td>生産バッチ記録更新: (:issue-certification?)</td><td>入力patchの正規化のみ。新規事実の生成なし。</td></tr>
+        <tr><td><code>schedule-maintenance</code></td><td><code>mnt-4</code></td><td class="num">0.9</td><td><code>loom-001</code></td><td>mnt-4 向け保守作業予定提案 (:belt-check) equipment=loom-001</td><td>equipment-verified?=true equipment-registered?=true actuate-equipment?=false</td></tr>
+        <tr><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td class="num">0.95</td><td><code>product-type</code> <code>last-assessed</code></td><td>生産バッチ記録更新: (:product-type :last-assessed)</td><td>入力patchの正規化のみ。新規事実の生成なし。</td></tr>
+      </tbody>
+    </table>
+  </section>
+  <section class="card">
+    <h2>Audit ledger (append-only, this run)</h2>
+    <p class="muted">The whole immutable decision log the run wrote, in order. Every commit, every hold, and the basis each one rests on.</p>
+    <table>
+      <thead><tr><th>#</th><th>Fact</th><th>Op</th><th>Subject</th><th>Actor</th><th>Disposition</th><th>Confidence</th><th>Basis</th><th>Summary</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td><code>committed</code></td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td><code>coord-1</code></td><td><span class="pill ok">commit</span></td><td class="num"></td><td><code>product-type</code> <code>last-assessed</code></td><td>生産バッチ記録更新: (:product-type :last-assessed)</td></tr>
+        <tr><td class="num">2</td><td><code>committed</code></td><td><code>schedule-maintenance</code></td><td><code>mnt-1</code></td><td><code>coord-1</code></td><td><span class="pill ok">commit</span></td><td class="num"></td><td><code>loom-001</code></td><td>mnt-1 向け保守作業予定提案 (:heddle-inspection) equipment=loom-001</td></tr>
+        <tr><td class="num">3</td><td><code>committed</code></td><td><code>flag-safety-concern</code></td><td><code>concern-1</code></td><td><code>coord-1</code></td><td><span class="pill ok">commit</span></td><td class="num"></td><td><code>loom-001</code></td><td>concern-1 向け安全懸念報告 (:moderate) equipment=loom-001</td></tr>
+        <tr><td class="num">4</td><td><code>committed</code></td><td><code>coordinate-shipment</code></td><td><code>ship-1</code></td><td><code>coord-1</code></td><td><span class="pill ok">commit</span></td><td class="num"></td><td><code>batch-001</code></td><td>ship-1 向け出荷調整提案 (50.0 台) batch=batch-001</td></tr>
+        <tr><td class="num">5</td><td><code>committed</code></td><td><code>coordinate-shipment</code></td><td><code>ship-2</code></td><td><code>coord-1</code></td><td><span class="pill ok">commit</span></td><td class="num"></td><td><code>batch-002</code></td><td>ship-2 向け出荷調整提案 (20.0 台) batch=batch-002</td></tr>
+        <tr><td class="num">6</td><td><code>governor-hold</code></td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.95</td><td><code>not-propose-effect</code></td><td></td></tr>
+        <tr><td class="num">7</td><td><code>governor-hold</code></td><td><code>actuate-assembly-line</code></td><td><code>batch-001</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.0</td><td><code>unknown-op</code> <code>equipment-control-blocked</code></td><td></td></tr>
+        <tr><td class="num">8</td><td><code>governor-hold</code></td><td><code>schedule-maintenance</code></td><td><code>mnt-2</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.3</td><td><code>equipment-not-verified</code></td><td></td></tr>
+        <tr><td class="num">9</td><td><code>governor-hold</code></td><td><code>coordinate-shipment</code></td><td><code>ship-3</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.3</td><td><code>batch-not-verified</code></td><td></td></tr>
+        <tr><td class="num">10</td><td><code>governor-hold</code></td><td><code>coordinate-shipment</code></td><td><code>ship-4</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.3</td><td><code>shipment-quantity-exceeded</code></td><td></td></tr>
+        <tr><td class="num">11</td><td><code>governor-hold</code></td><td><code>coordinate-shipment</code></td><td><code>ship-5</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.9</td><td><code>shipment-quantity-exceeded</code></td><td></td></tr>
+        <tr><td class="num">12</td><td><code>governor-hold</code></td><td><code>schedule-maintenance</code></td><td><code>mnt-3</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.3</td><td><code>equipment-actuate-blocked</code></td><td></td></tr>
+        <tr><td class="num">13</td><td><code>governor-hold</code></td><td><code>schedule-maintenance</code></td><td><code>mnt-1</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.9</td><td><code>already-scheduled</code></td><td></td></tr>
+        <tr><td class="num">14</td><td><code>governor-hold</code></td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.95</td><td><code>invalid-product-type</code></td><td></td></tr>
+        <tr><td class="num">15</td><td><code>governor-hold</code></td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.95</td><td><code>invalid-no-load-run-speed</code></td><td></td></tr>
+        <tr><td class="num">16</td><td><code>governor-hold</code></td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.95</td><td><code>invalid-defect-rate</code></td><td></td></tr>
+        <tr><td class="num">17</td><td><code>governor-hold</code></td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.95</td><td><code>certification-authority-blocked</code></td><td></td></tr>
+        <tr><td class="num">18</td><td><code>approval-rejected</code></td><td><code>schedule-maintenance</code></td><td><code>mnt-4</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.9</td><td><code>approver-rejected</code></td><td></td></tr>
+        <tr><td class="num">19</td><td><code>governor-hold</code></td><td><code>log-production-batch</code></td><td><code>batch-001</code></td><td><code>coord-1</code></td><td><span class="pill critical">hold</span></td><td class="num">0.95</td><td><code>phase-disabled</code> <span class="pill warn">phase 0</span></td><td></td></tr>
+      </tbody>
+    </table>
+  </section>
+</main>
+<footer>
+  <p>Generated by <code>texmachmfg.render-html</code> from a live run of this repo's own actor stack. This actor coordinates back-office records only: it never actuates assembly or test-bench equipment, never dispatches a real freight carrier, and is never the certification body that issues a machinery safety mark (e.g. CE marking under the EU Machinery Directive).</p>
+</footer>
+</body>
+</html>
