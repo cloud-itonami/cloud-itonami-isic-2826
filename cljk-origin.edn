@@ -1,0 +1,18 @@
+{:format :kotoba.cljk-origin/v1
+ :renamed-on "2026-09-11"
+ :decision "adr-2609111500-cljk-rename-all-clojure-source (com-junkawasaki/root 90-docs/adr; owner instruction 2026-09-11)"
+ :rule "value = the extension the file had before the rename. A path ending in .clj.cljk or .cljs.cljk kept it in the name because both platform files existed (or the plain target was taken)."
+ :origins
+ {"src/texmachmfg/advisor.cljk" ".cljc"
+  "src/texmachmfg/governor.cljk" ".cljc"
+  "src/texmachmfg/operation.cljk" ".cljc"
+  "src/texmachmfg/phase.cljk" ".cljc"
+  "src/texmachmfg/registry.cljk" ".cljc"
+  "src/texmachmfg/render_html.cljk" ".clj"
+  "src/texmachmfg/sim.cljk" ".cljc"
+  "src/texmachmfg/store.cljk" ".cljc"
+  "test/texmachmfg/governor_contract_test.cljk" ".cljc"
+  "test/texmachmfg/operation_test.cljk" ".cljc"
+  "test/texmachmfg/phase_test.cljk" ".cljc"
+  "test/texmachmfg/registry_test.cljk" ".cljc"
+  "test/texmachmfg/store_contract_test.cljk" ".cljc"}}
