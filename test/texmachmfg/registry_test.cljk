@@ -1,5 +1,5 @@
 (ns texmachmfg.registry-test
-  (:require [clojure.test :refer [deftest is]]
+  (:require [kotoba.test :refer [deftest is]]
             [texmachmfg.registry :as r]))
 
 ;; ----------------------------- equipment-verified? / equipment-registered? / equipment-ready? -----------------------------
