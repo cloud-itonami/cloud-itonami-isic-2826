@@ -37,7 +37,7 @@
 
   Usage: `kbb -M:dev:render-html [out-file]`
   (default `docs/samples/operator-console.html`)."
-  (:require [kotoba.lang.text :as str]
+  (:require [kotoba.io :as kio] [kotoba.lang.text :as str]
             [langgraph.graph :as g]
             [texmachmfg.governor :as governor]
             [texmachmfg.operation :as op]
@@ -1044,7 +1044,7 @@
         html (render run vendored)
         ledger (vec (store/ledger (:db run)))
         rules (sort (map name (set (mapcat violation-rules (holds ledger)))))]
-    (.mkdirs (java.io.File. (or (.getParent (java.io.File. ^String out)) ".")))
+    (kio/mkdirs (kio/file (or (kio/parent (kio/file ^String out)) ".")))
     (spit out html)
     (println "wrote" out (str "(" (count html) " bytes)"))
     (println " " (count ledger) "ledger facts,"
